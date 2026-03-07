@@ -88,20 +88,26 @@ if uploaded_file is not None:
                     pred = model.predict(X_test)
                     acc = accuracy_score(y_test, pred)
                     results[name] = acc
-    
+
             else:
                 models = {
                     "Linear Regression": LinearRegression(),
                     "Random Forest Regressor": RandomForestRegressor()
                 }
-    
+
                 for name, model in models.items():
                     model.fit(X_train, y_train)
                     pred = model.predict(X_test)
                     score = r2_score(y_test, pred)
                     results[name] = score
-    
+
             st.subheader("Model Leaderboard")
             st.write(results)
+            results_df = pd.DataFrame(results.items(), columns=["Model", "Score"])
+            results_df = results_df.sort_values(by="Score", ascending=False)
 
+            st.dataframe(results_df)
+            best_model = results_df.iloc[0]
+
+            st.success(f"Best Model: {best_model['Model']} with score {best_model['Score']:.3f}")
 
