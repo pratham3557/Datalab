@@ -29,6 +29,27 @@ if uploaded_file is not None:
         st.write(df.isnull().sum())
 
     st.subheader("Statistical Summary")
-    st.write(df.describe())
+    import plotly.express as px
+
+    st.subheader("Data Visualization")
+
+    numeric_columns = df.select_dtypes(include=['int64','float64']).columns
+
+    if len(numeric_columns) > 0:
+
+        column = st.selectbox("Select column for histogram", numeric_columns)
+
+        fig = px.histogram(df, x=column)
+
+        st.plotly_chart(fig)
+
+        st.subheader("Correlation Heatmap")
+
+        corr = df[numeric_columns].corr()
+
+        fig2 = px.imshow(corr, text_auto=True)
+
+        st.plotly_chart(fig2)
+        st.write(df.describe())
 
 
