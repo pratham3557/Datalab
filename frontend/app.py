@@ -51,5 +51,57 @@ if uploaded_file is not None:
 
         st.plotly_chart(fig2)
         st.write(df.describe())
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import accuracy_score, r2_score
+        from sklearn.linear_model import LogisticRegression, LinearRegression
+        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+        from sklearn.svm import SVC
+        from sklearn.neighbors import KNeighborsClassifier
+
+        st.subheader("AutoML Training")
+
+        target = st.selectbox("Select Target Column", df.columns)
+
+        if st.button("Run AutoML"):
+
+            X = df.drop(columns=[target])
+            y = df[target]
+
+            X = pd.get_dummies(X)
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+
+            results = {}
+
+            if y.nunique() < 20:
+                models = {
+                    "Logistic Regression": LogisticRegression(max_iter=1000),
+                    "Random Forest": RandomForestClassifier(),
+                    "SVM": SVC(),
+                    "KNN": KNeighborsClassifier()
+                }
+
+                for name, model in models.items():
+                    model.fit(X_train, y_train)
+                    pred = model.predict(X_test)
+                    acc = accuracy_score(y_test, pred)
+                    results[name] = acc
+    
+            else:
+                models = {
+                    "Linear Regression": LinearRegression(),
+                    "Random Forest Regressor": RandomForestRegressor()
+                }
+    
+                for name, model in models.items():
+                    model.fit(X_train, y_train)
+                    pred = model.predict(X_test)
+                    score = r2_score(y_test, pred)
+                    results[name] = score
+    
+            st.subheader("Model Leaderboard")
+            st.write(results)
 
 
