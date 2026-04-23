@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataLens — AI Data Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111418;
+    --bg3: #181c22;
+    --bg4: #1f242c;
+    --border: #252b35;
+    --border2: #2e3642;
+    --teal: #00d4a8;
+    --teal2: #00a882;
+    --amber: #f5a623;
+    --amber2: #c47d0e;
+    --text: #e8edf4;
+    --text2: #8a95a3;
+    --text3: #4a5568;
+    --red: #ff5252;
+    --green: #52e888;
+    --blue: #4a9eff;
+    --purple: #9b72ff;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,168,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,168,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .logo { width: 40px; height: 40px; background: var(--teal); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo svg { width: 22px; height: 22px; fill: var(--bg); }
+  header h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+  header p { font-size: 0.8rem; color: var(--text2); margin-top: 1px; font-family: var(--font-mono); }
+  .header-badge { margin-left: auto; background: rgba(0,212,168,0.1); border: 1px solid rgba(0,212,168,0.3); color: var(--teal); font-family: var(--font-mono); font-size: 0.65rem; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* Upload Zone */
+  #upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 16px;
+    padding: 3.5rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--bg2);
+    position: relative;
+    overflow: hidden;
+  }
+  #upload-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,212,168,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #upload-zone:hover, #upload-zone.drag-over {
+    border-color: var(--teal);
+    background: rgba(0,212,168,0.03);
+  }
+  #upload-zone.drag-over { transform: scale(1.005); }
+  .upload-icon { width: 56px; height: 56px; margin: 0 auto 1.2rem; background: var(--bg3); border: 1px solid var(--border2); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+  .upload-icon svg { width: 26px; height: 26px; stroke: var(--teal); fill: none; stroke-width: 1.5; }
+  #upload-zone h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.4rem; }
+  #upload-zone p { font-size: 0.8rem; color: var(--text2); font-family: var(--font-mono); }
+  #upload-zone p span { color: var(--teal); }
+  #file-input { display: none; }
+  .btn-upload { display: inline-flex; align-items: center; gap: 6px; margin-top: 1.2rem; background: var(--teal); color: var(--bg); font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.03em; padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer; transition: background 0.15s; }
+  .btn-upload:hover { background: var(--teal2); }
+
+  /* Pipeline Steps */
+  .pipeline { display: flex; align-items: center; gap: 0; margin-bottom: 2rem; }
+  .step { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 6px; font-size: 0.75rem; font-family: var(--font-mono); color: var(--text3); transition: all 0.3s; }
+  .step.active { color: var(--teal); }
+  .step.done { color: var(--text2); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; flex-shrink: 0; }
+  .step.done .step-num { background: var(--teal); border-color: var(--teal); color: var(--bg); }
+  .step-arrow { color: var(--border2); font-size: 0.7rem; margin: 0 2px; }
+
+  /* Section */
+  .section { margin-bottom: 2rem; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .section-head { display: flex; align-items: center; gap: 10px; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+  .section-head h3 { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text2); }
+  .section-badge { margin-left: auto; font-family: var(--font-mono); font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; }
+  .badge-teal { background: rgba(0,212,168,0.1); color: var(--teal); border: 1px solid rgba(0,212,168,0.2); }
+  .badge-amber { background: rgba(245,166,35,0.1); color: var(--amber); border: 1px solid rgba(245,166,35,0.2); }
+  .badge-red { background: rgba(255,82,82,0.1); color: var(--red); border: 1px solid rgba(255,82,82,0.2); }
+  .section-body { padding: 1.25rem; }
+
+  /* Cleaning Report */
+  .clean-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .clean-stat { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
+  .clean-stat .num { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; }
+  .clean-stat .lbl { font-size: 0.7rem; color: var(--text2); margin-top: 3px; }
+  .clean-stat.green .num { color: var(--green); }
+  .clean-stat.amber .num { color: var(--amber); }
+  .clean-stat.red .num { color: var(--red); }
+  .clean-stat.teal .num { color: var(--teal); }
+
+  /* Clean log */
+  .clean-log { margin-top: 1rem; background: var(--bg); border-radius: 8px; padding: 0.75rem 1rem; font-family: var(--font-mono); font-size: 0.7rem; line-height: 1.8; max-height: 160px; overflow-y: auto; }
+  .log-item { display: flex; align-items: flex-start; gap: 8px; }
+  .log-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .log-item.ok .log-dot { background: var(--green); }
+  .log-item.warn .log-dot { background: var(--amber); }
+  .log-item.info .log-dot { background: var(--teal); }
+  .log-item.ok span { color: var(--text2); }
+  .log-item.warn span { color: var(--amber); }
+  .log-item.info span { color: var(--teal); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; max-height: 340px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.75rem; font-family: var(--font-mono); }
+  th { background: var(--bg3); padding: 8px 12px; text-align: left; color: var(--text2); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; position: sticky; top: 0; border-bottom: 1px solid var(--border2); white-space: nowrap; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  tr:hover td { background: var(--bg3); }
+  td.null-val { color: var(--text3); font-style: italic; }
+  td.num-val { color: var(--blue); }
+  td.date-val { color: var(--purple); }
+
+  /* Stats Grid */
+  .stats-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .stat-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .stat-col-name { font-size: 0.8rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+  .type-badge { font-family: var(--font-mono); font-size: 0.6rem; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
+  .type-number { background: rgba(74,158,255,0.12); color: var(--blue); border: 1px solid rgba(74,158,255,0.2); }
+  .type-string { background: rgba(155,114,255,0.12); color: var(--purple); border: 1px solid rgba(155,114,255,0.2); }
+  .type-date { background: rgba(82,232,136,0.12); color: var(--green); border: 1px solid rgba(82,232,136,0.2); }
+  .stat-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-row { display: flex; flex-direction: column; }
+  .stat-key { font-size: 0.62rem; color: var(--text3); font-family: var(--font-mono); text-transform: uppercase; }
+  .stat-val { font-size: 0.78rem; font-family: var(--font-mono); color: var(--text); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .null-bar-wrap { margin-top: 10px; }
+  .null-bar-label { display: flex; justify-content: space-between; font-size: 0.62rem; font-family: var(--font-mono); color: var(--text3); margin-bottom: 4px; }
+  .null-bar { height: 4px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+  .null-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+  /* Charts */
+  .charts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .chart-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .chart-title { font-size: 0.75rem; font-weight: 600; color: var(--text2); margin-bottom: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-wrap { position: relative; height: 180px; }
+
+  /* AI Insights */
+  .ai-box { background: var(--bg); border: 1px solid rgba(0,212,168,0.2); border-radius: 10px; padding: 1.25rem; position: relative; overflow: hidden; }
+  .ai-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--teal), var(--purple), var(--teal)); background-size: 200%; animation: shimmer 2s linear infinite; }
+  @keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
+  .ai-label { font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--teal); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px; }
+  .ai-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+  .ai-text { font-size: 0.85rem; line-height: 1.75; color: var(--text); white-space: pre-wrap; }
+  .ai-text h3 { font-size: 0.9rem; font-weight: 700; color: var(--teal); margin: 0.75rem 0 0.25rem; }
+  .ai-text h3:first-child { margin-top: 0; }
+  .ai-text strong { color: var(--amber); }
+  .ai-text li { margin-left: 1rem; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--font-display); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.02em; transition: all 0.15s; }
+  .btn-primary { background: var(--teal); color: var(--bg); }
+  .btn-primary:hover { background: var(--teal2); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+  .btn-secondary:hover { border-color: var(--teal); color: var(--teal); }
+  .btn-amber { background: var(--amber); color: var(--bg); }
+  .btn-amber:hover { background: var(--amber2); }
+  .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* Loading */
+  .spinner { width: 18px; height: 18px; border: 2px solid rgba(0,212,168,0.2); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* Fade-in */
+  .fade-in { animation: fadeIn 0.35s ease forwards; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  /* File info bar */
+  .file-bar { display: flex; align-items: center; gap: 12px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+  .file-icon { width: 32px; height: 32px; background: rgba(0,212,168,0.1); border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .file-icon svg { width: 16px; height: 16px; stroke: var(--teal); fill: none; stroke-width: 2; }
+  .file-name { font-weight: 700; font-size: 0.85rem; }
+  .file-meta { font-size: 0.7rem; color: var(--text2); font-family: var(--font-mono); }
+  .file-reset { margin-left: auto; font-size: 0.7rem; color: var(--text3); cursor: pointer; font-family: var(--font-mono); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: none; transition: all 0.15s; }
+  .file-reset:hover { color: var(--red); border-color: var(--red); }
+
+  .hidden { display: none !important; }
+
+  /* Corr matrix */
+  .corr-table td, .corr-table th { padding: 5px 8px; text-align: center; font-size: 0.65rem; }
+  .corr-table { width: 100%; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+    </div>
+    <div>
+      <h1>DataLens</h1>
+      <p>AI-Powered Data Analysis Engine</p>
+    </div>
+    <div class="header-badge">v2.0 · AI Ready</div>
+  </header>
+
+  <!-- Upload -->
+  <div id="upload-section">
+    <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h2>Drop your CSV file here</h2>
+      <p>Drag & drop or <span>click to browse</span> · Max 50MB</p>
+      <button class="btn-upload" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+        Choose File
+      </button>
+    </div>
+    <input type="file" id="file-input" accept=".csv">
+  </div>
+
+  <!-- Main content (hidden until file loaded) -->
+  <div id="main-content" class="hidden">
+    <!-- File bar -->
+    <div class="file-bar fade-in" id="file-bar">
+      <div class="file-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+      </div>
+      <div>
+        <div class="file-name" id="fname">—</div>
+        <div class="file-meta" id="fmeta">—</div>
+      </div>
+      <button class="file-reset" onclick="resetApp()">✕ reset</button>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="pipeline fade-in">
+      <div class="step done" id="step1"><div class="step-num">✓</div><span>Upload</span></div>
+      <span class="step-arrow">›</span>
+      <div class="step active" id="step2"><div class="step-num">2</div><span>Clean</span></div>
+      <span class="step-arrow">›</span>
+      <div class="step" id="step3"><div class="step-num">3</div><span>Analyze</span></div>
+      <span class="step-arrow">›</span>
+      <div class="step" id="step4"><div class="step-num">4</div><span>Insights</span></div>
+    </div>
+
+    <!-- Cleaning Report -->
+    <div class="section fade-in" id="clean-section">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--teal)" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <h3>Auto-Clean Report</h3>
+        <div class="section-badge badge-teal" id="clean-badge">—</div>
+      </div>
+      <div class="section-body">
+        <div class="clean-grid" id="clean-stats"></div>
+        <div class="clean-log" id="clean-log"></div>
+      </div>
+    </div>
+
+    <!-- Data Preview -->
+    <div class="section fade-in">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--teal)" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        <h3>Cleaned Data Preview</h3>
+        <div class="section-badge badge-teal" id="preview-badge">—</div>
+      </div>
+      <div class="section-body" style="padding:0">
+        <div class="table-wrap" id="preview-table"></div>
+      </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="section fade-in" id="stats-section">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--amber)" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <h3>Column Statistics</h3>
+        <div class="section-badge badge-amber" id="stats-badge">—</div>
+      </div>
+      <div class="section-body">
+        <div class="stats-cols" id="stats-grid"></div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section fade-in" id="charts-section">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--purple)" fill="none" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+        <h3>Visual Analysis</h3>
+        <div class="section-badge" style="background:rgba(155,114,255,0.1);color:var(--purple);border:1px solid rgba(155,114,255,0.2)" id="charts-badge">—</div>
+      </div>
+      <div class="section-body">
+        <div class="charts-grid" id="charts-grid"></div>
+      </div>
+    </div>
+
+    <!-- AI Insights -->
+    <div class="section fade-in" id="ai-section">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--teal)" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        <h3>AI Insights</h3>
+        <div class="section-badge badge-teal" id="ai-status-badge">Ready</div>
+      </div>
+      <div class="section-body">
+        <div id="ai-content">
+          <div class="btn-row" id="ai-btn-row">
+            <button class="btn btn-primary" onclick="runAIAnalysis()" id="ai-btn">
+              <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+              Generate AI Analysis
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Download -->
+    <div class="section fade-in">
+      <div class="section-head">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--amber)" fill="none" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <h3>Download</h3>
+      </div>
+      <div class="section-body">
+        <div class="btn-row">
+          <button class="btn btn-amber" onclick="downloadCleaned()">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Cleaned CSV
+          </button>
+          <button class="btn btn-secondary" onclick="downloadReport()">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            Download Stats Report
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let rawData = [], cleanData = [], headers = [], colTypes = {};
+let colStats = {}, cleanReport = {}, fileName = '';
+let chartInstances = [];
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) processFile(e.target.files[0]);
+});
+
+function processFile(file) {
+  if (!file.name.endsWith('.csv')) { alert('Please upload a CSV file.'); return; }
+  fileName = file.name;
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true, dynamicTyping: false,
+    complete: res => {
+      rawData = res.data;
+      headers = res.meta.fields || [];
+      document.getElementById('fname').textContent = file.name;
+      document.getElementById('fmeta').textContent =
+        `${rawData.length.toLocaleString()} rows · ${headers.length} columns · ${(file.size/1024).toFixed(1)} KB`;
+      document.getElementById('upload-section').classList.add('hidden');
+      document.getElementById('main-content').classList.remove('hidden');
+      runPipeline();
+    }
+  });
+}
+
+// ─── PIPELINE ─────────────────────────────────────────────────────────────────
+function runPipeline() {
+  detectTypes();
+  cleanData = autoClean(rawData);
+  renderCleanReport();
+  renderPreview();
+  renderStats();
+  renderCharts();
+  document.getElementById('step3').classList.add('active');
+  document.getElementById('step4').classList.add('active');
+}
+
+// ─── TYPE DETECTION ───────────────────────────────────────────────────────────
+function detectTypes() {
+  colTypes = {};
+  headers.forEach(h => {
+    const vals = rawData.map(r => r[h]).filter(v => v !== '' && v != null && v !== undefined);
+    const numCount = vals.filter(v => !isNaN(parseFloat(v)) && isFinite(v)).length;
+    const dateCount = vals.filter(v => !isNaN(Date.parse(v)) && isNaN(Number(v))).length;
+    if (vals.length === 0) { colTypes[h] = 'string'; return; }
+    if (numCount / vals.length > 0.8) colTypes[h] = 'number';
+    else if (dateCount / vals.length > 0.6) colTypes[h] = 'date';
+    else colTypes[h] = 'string';
+  });
+}
+
+// ─── AUTO CLEAN ───────────────────────────────────────────────────────────────
+function autoClean(data) {
+  const log = [];
+  let cleaned = JSON.parse(JSON.stringify(data));
+  const origLen = cleaned.length;
+
+  // 1. Trim whitespace
+  let trimmed = 0;
+  cleaned = cleaned.map(row => {
+    const nr = {...row};
+    headers.forEach(h => {
+      if (typeof nr[h] === 'string' && nr[h] !== nr[h].trim()) { nr[h] = nr[h].trim(); trimmed++; }
+    });
+    return nr;
+  });
+  if (trimmed > 0) log.push({type:'ok', msg:`Trimmed whitespace in ${trimmed} cell(s)`});
+
+  // 2. Standardize empty strings to null marker
+  let nullified = 0;
+  cleaned = cleaned.map(row => {
+    const nr = {...row};
+    headers.forEach(h => {
+      if (nr[h] === '' || nr[h] === 'NULL' || nr[h] === 'null' || nr[h] === 'N/A' || nr[h] === 'n/a' || nr[h] === 'NA' || nr[h] === '-') {
+        nr[h] = ''; nullified++;
+      }
+    });
+    return nr;
+  });
+  if (nullified > 0) log.push({type:'info', msg:`Standardized ${nullified} null/empty value(s) (NULL, N/A, -, etc.)`});
+
+  // 3. Remove fully empty rows
+  const beforeEmpty = cleaned.length;
+  cleaned = cleaned.filter(row => headers.some(h => row[h] !== '' && row[h] != null));
+  const removedEmpty = beforeEmpty - cleaned.length;
+  if (removedEmpty > 0) log.push({type:'warn', msg:`Removed ${removedEmpty} fully empty row(s)`});
+
+  // 4. Remove duplicates
+  const seen = new Set();
+  const beforeDup = cleaned.length;
+  cleaned = cleaned.filter(row => {
+    const key = JSON.stringify(headers.map(h => row[h]));
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  const removedDups = beforeDup - cleaned.length;
+  if (removedDups > 0) log.push({type:'warn', msg:`Removed ${removedDups} duplicate row(s)`});
+  else log.push({type:'ok', msg:'No duplicate rows found'});
+
+  // 5. Numeric column: fill missing with median
+  headers.forEach(h => {
+    if (colTypes[h] === 'number') {
+      const nums = cleaned.map(r => r[h]).filter(v => v !== '' && v != null && !isNaN(parseFloat(v))).map(Number).sort((a,b)=>a-b);
+      if (nums.length === 0) return;
+      const median = nums[Math.floor(nums.length/2)];
+      let filled = 0;
+      cleaned = cleaned.map(row => {
+        if (row[h] === '' || row[h] == null || isNaN(parseFloat(row[h]))) {
+          filled++;
+          return {...row, [h]: String(+median.toFixed(4))};
+        }
+        return row;
+      });
+      if (filled > 0) log.push({type:'info', msg:`Filled ${filled} missing value(s) in "${h}" with median (${+median.toFixed(4)})`});
+    }
+  });
+
+  // 6. Numeric formatting: clean non-numeric chars in number cols
+  headers.forEach(h => {
+    if (colTypes[h] === 'number') {
+      let fixed = 0;
+      cleaned = cleaned.map(row => {
+        if (row[h] === '' || row[h] == null) return row;
+        const orig = String(row[h]);
+        const stripped = orig.replace(/[$,€£%]/g, '').trim();
+        if (stripped !== orig && !isNaN(parseFloat(stripped))) { fixed++; return {...row, [h]: stripped}; }
+        return row;
+      });
+      if (fixed > 0) log.push({type:'ok', msg:`Stripped currency/percent symbols in ${fixed} cell(s) of "${h}"`});
+    }
+  });
+
+  // 7. String: title-case fix for obvious name columns
+  headers.forEach(h => {
+    if (colTypes[h] === 'string') {
+      const lname = h.toLowerCase();
+      if (['name','city','country','state','region','category','type','status'].some(k => lname.includes(k))) {
+        let fixed = 0;
+        cleaned = cleaned.map(row => {
+          if (!row[h]) return row;
+          const v = String(row[h]);
+          const titled = v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+          if (titled !== v && v.length < 40) { fixed++; return {...row, [h]: titled}; }
+          return row;
+        });
+        if (fixed > 0) log.push({type:'ok', msg:`Normalized casing in ${fixed} cell(s) of "${h}"`});
+      }
+    }
+  });
+
+  const totalRemoved = origLen - cleaned.length;
+  cleanReport = { origRows: origLen, finalRows: cleaned.length, removedEmpty, removedDups, nullified, trimmed, log };
+  return cleaned;
+}
+
+// ─── RENDER CLEAN REPORT ─────────────────────────────────────────────────────
+function renderCleanReport() {
+  document.getElementById('clean-badge').textContent = `${cleanReport.log.length} actions`;
+  const stats = [
+    { num: cleanReport.origRows, lbl: 'Original Rows', cls: '' },
+    { num: cleanReport.finalRows, lbl: 'Cleaned Rows', cls: 'teal' },
+    { num: cleanReport.removedDups + cleanReport.removedEmpty, lbl: 'Rows Removed', cls: cleanReport.removedDups+cleanReport.removedEmpty>0?'amber':'' },
+    { num: cleanReport.nullified, lbl: 'Nulls Standardized', cls: 'amber' },
+    { num: cleanReport.trimmed, lbl: 'Cells Trimmed', cls: '' },
+    { num: headers.length, lbl: 'Columns', cls: '' },
+  ];
+  document.getElementById('clean-stats').innerHTML = stats.map(s =>
+    `<div class="clean-stat ${s.cls}"><div class="num">${s.num.toLocaleString()}</div><div class="lbl">${s.lbl}</div></div>`
+  ).join('');
+  document.getElementById('clean-log').innerHTML = cleanReport.log.map(l =>
+    `<div class="log-item ${l.type}"><div class="log-dot"></div><span>${l.msg}</span></div>`
+  ).join('');
+}
+
+// ─── RENDER PREVIEW ──────────────────────────────────────────────────────────
+function renderPreview() {
+  const rows = cleanData.slice(0, 50);
+  document.getElementById('preview-badge').textContent = `${cleanData.length} rows · ${headers.length} cols`;
+  const html = `<table>
+    <thead><tr>${headers.map(h => `<th title="${h}">${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(row => `<tr>${headers.map(h => {
+      const v = row[h];
+      const cls = (v===''||v==null) ? 'null-val' : colTypes[h]==='number' ? 'num-val' : colTypes[h]==='date' ? 'date-val' : '';
+      return `<td class="${cls}" title="${v}">${v===''||v==null ? 'null' : v}</td>`;
+    }).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+  document.getElementById('preview-table').innerHTML = html;
+}
+
+// ─── COMPUTE STATS ────────────────────────────────────────────────────────────
+function computeStats() {
+  colStats = {};
+  headers.forEach(h => {
+    const vals = cleanData.map(r => r[h]);
+    const nullCount = vals.filter(v => v === '' || v == null).length;
+    const nullPct = (nullCount / vals.length * 100).toFixed(1);
+    const nonNull = vals.filter(v => v !== '' && v != null);
+
+    if (colTypes[h] === 'number') {
+      const nums = nonNull.map(Number).filter(n => !isNaN(n)).sort((a,b)=>a-b);
+      const sum = nums.reduce((a,b)=>a+b,0);
+      const mean = nums.length ? sum/nums.length : 0;
+      const median = nums.length ? nums[Math.floor(nums.length/2)] : 0;
+      const min = nums.length ? nums[0] : 0;
+      const max = nums.length ? nums[nums.length-1] : 0;
+      const std = nums.length ? Math.sqrt(nums.reduce((a,b)=>a+(b-mean)**2,0)/nums.length) : 0;
+      colStats[h] = { type:'number', count: nonNull.length, nullCount, nullPct, mean, median, min, max, std, nums };
+    } else {
+      const freq = {};
+      nonNull.forEach(v => { freq[v] = (freq[v]||0) + 1; });
+      const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+      colStats[h] = { type:'string', count: nonNull.length, nullCount, nullPct, unique: Object.keys(freq).length, topVal: sorted[0]?.[0] || '—', topCount: sorted[0]?.[1] || 0, freq, sorted };
+    }
+  });
+}
+
+// ─── RENDER STATS ─────────────────────────────────────────────────────────────
+function renderStats() {
+  computeStats();
+  document.getElementById('stats-badge').textContent = `${headers.length} columns`;
+  const html = headers.map(h => {
+    const s = colStats[h];
+    const nullBarColor = s.nullPct > 20 ? 'var(--red)' : s.nullPct > 5 ? 'var(--amber)' : 'var(--green)';
+    let rows = '';
+    if (s.type === 'number') {
+      rows = `
+        <div class="stat-rows">
+          <div class="stat-row"><span class="stat-key">Min</span><span class="stat-val">${fmt(s.min)}</span></div>
+          <div class="stat-row"><span class="stat-key">Max</span><span class="stat-val">${fmt(s.max)}</span></div>
+          <div class="stat-row"><span class="stat-key">Mean</span><span class="stat-val">${fmt(s.mean)}</span></div>
+          <div class="stat-row"><span class="stat-key">Median</span><span class="stat-val">${fmt(s.median)}</span></div>
+          <div class="stat-row"><span class="stat-key">Std Dev</span><span class="stat-val">${fmt(s.std)}</span></div>
+          <div class="stat-row"><span class="stat-key">Non-null</span><span class="stat-val">${s.count}</span></div>
+        </div>`;
+    } else {
+      rows = `
+        <div class="stat-rows">
+          <div class="stat-row"><span class="stat-key">Unique</span><span class="stat-val">${s.unique.toLocaleString()}</span></div>
+          <div class="stat-row"><span class="stat-key">Count</span><span class="stat-val">${s.count.toLocaleString()}</span></div>
+          <div class="stat-row" style="grid-column:1/-1"><span class="stat-key">Top Value</span><span class="stat-val" title="${s.topVal}">${s.topVal} (${s.topCount}×)</span></div>
+        </div>`;
+    }
+    return `<div class="stat-card">
+      <div class="stat-card-head">
+        <span class="stat-col-name" title="${h}">${h}</span>
+        <span class="type-badge type-${s.type}">${s.type}</span>
+      </div>
+      ${rows}
+      <div class="null-bar-wrap">
+        <div class="null-bar-label"><span>missing data</span><span>${s.nullPct}%</span></div>
+        <div class="null-bar"><div class="null-bar-fill" style="width:${s.nullPct}%;background:${nullBarColor}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('stats-grid').innerHTML = html;
+}
+
+function fmt(n) {
+  if (n === undefined || n === null || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(2)+'K';
+  if (Number.isInteger(n)) return n.toLocaleString();
+  return parseFloat(n.toFixed(4)).toLocaleString();
+}
+
+// ─── RENDER CHARTS ────────────────────────────────────────────────────────────
+function renderCharts() {
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+
+  const numCols = headers.filter(h => colTypes[h] === 'number');
+  const catCols = headers.filter(h => colTypes[h] === 'string');
+  document.getElementById('charts-badge').textContent = `${numCols.length + Math.min(catCols.length,3)} charts`;
+
+  let chartsHtml = '';
+  const chartDefs = [];
+
+  numCols.forEach(h => {
+    const id = 'chart_' + h.replace(/\W/g,'_');
+    chartsHtml += `<div class="chart-card"><div class="chart-title">${h} — distribution</div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`;
+    chartDefs.push({ id, type: 'hist', col: h });
+  });
+
+  catCols.slice(0,4).forEach(h => {
+    const id = 'chart_cat_' + h.replace(/\W/g,'_');
+    chartsHtml += `<div class="chart-card"><div class="chart-title">${h} — frequency</div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`;
+    chartDefs.push({ id, type: 'bar', col: h });
+  });
+
+  if (numCols.length >= 2) {
+    const id = 'chart_scatter';
+    chartsHtml += `<div class="chart-card"><div class="chart-title">${numCols[0]} vs ${numCols[1]} — scatter</div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`;
+    chartDefs.push({ id, type: 'scatter', col1: numCols[0], col2: numCols[1] });
+  }
+
+  document.getElementById('charts-grid').innerHTML = chartsHtml;
+
+  const palette = ['#00d4a8','#4a9eff','#9b72ff','#f5a623','#ff5252','#52e888'];
+  Chart.defaults.color = '#8a95a3';
+  Chart.defaults.borderColor = '#252b35';
+  Chart.defaults.font.family = "'Space Mono', monospace";
+  Chart.defaults.font.size = 10;
+
+  setTimeout(() => {
+    chartDefs.forEach((def, ci) => {
+      const canvas = document.getElementById(def.id);
+      if (!canvas) return;
+      const color = palette[ci % palette.length];
+
+      if (def.type === 'hist') {
+        const nums = colStats[def.col]?.nums || [];
+        if (!nums.length) return;
+        const bins = 20;
+        const min = nums[0], max = nums[nums.length-1];
+        const binSize = (max-min)/bins || 1;
+        const counts = new Array(bins).fill(0);
+        nums.forEach(n => {
+          const bi = Math.min(Math.floor((n-min)/binSize), bins-1);
+          counts[bi]++;
+        });
+        const labels = counts.map((_,i) => fmt(min + i*binSize));
+        chartInstances.push(new Chart(canvas, {
+          type:'bar', data:{ labels, datasets:[{ data:counts, backgroundColor:color+'33', borderColor:color, borderWidth:1, borderRadius:2 }] },
+          options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ticks:{maxTicksLimit:6}}, y:{ticks:{maxTicksLimit:5}} } }
+        }));
+      } else if (def.type === 'bar') {
+        const s = colStats[def.col];
+        if (!s?.sorted) return;
+        const top = s.sorted.slice(0,10);
+        chartInstances.push(new Chart(canvas, {
+          type:'bar', data:{ labels:top.map(x=>x[0]), datasets:[{ data:top.map(x=>x[1]), backgroundColor:top.map((_,i)=>palette[i%palette.length]+'55'), borderColor:top.map((_,i)=>palette[i%palette.length]), borderWidth:1, borderRadius:3 }] },
+          options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ticks:{maxTicksLimit:5}}, y:{ticks:{font:{size:9}}} } }
+        }));
+      } else if (def.type === 'scatter') {
+        const pts = cleanData.map(r => ({ x: parseFloat(r[def.col1]), y: parseFloat(r[def.col2]) })).filter(p => !isNaN(p.x) && !isNaN(p.y)).slice(0,500);
+        chartInstances.push(new Chart(canvas, {
+          type:'scatter', data:{ datasets:[{ data:pts, backgroundColor:color+'44', borderColor:color, pointRadius:3, pointHoverRadius:5 }] },
+          options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{title:{display:true,text:def.col1,font:{size:9}}}, y:{title:{display:true,text:def.col2,font:{size:9}}} } }
+        }));
+      }
+    });
+  }, 100);
+}
+
+// ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
+async function runAIAnalysis() {
+  const btn = document.getElementById('ai-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> Analyzing...`;
+  document.getElementById('ai-status-badge').textContent = 'Running';
+
+  const summaryForAI = buildAISummary();
+
+  const prompt = `You are a senior data analyst. Analyze this dataset and provide sharp, actionable insights.
+
+DATASET SUMMARY:
+${summaryForAI}
+
+Provide a structured analysis with these exact sections (use ### for headers):
+
+### Overview
+Brief dataset summary — what it likely represents, scale, and completeness.
+
+### Key Findings
+3–5 most important statistical observations. Be specific with numbers.
+
+### Data Quality Assessment
+Issues found, outliers, skewed distributions, missing data patterns.
+
+### Patterns & Correlations
+Notable relationships between columns, trends, anomalies.
+
+### Recommendations
+2–3 concrete next steps for analysis or data improvement.
+
+Keep it sharp, data-driven, and specific. Reference actual column names and numbers.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || 'No response received.';
+
+    document.getElementById('ai-content').innerHTML = `
+      <div class="ai-box">
+        <div class="ai-label"><div class="ai-dot"></div>AI Analysis · claude-sonnet-4</div>
+        <div class="ai-text" id="ai-text-output"></div>
+      </div>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn btn-secondary" onclick="runAIAnalysis()">
+          <svg viewBox="0 0 24 24"><polyline points="23,4 23,11 16,11"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 11"/></svg>
+          Re-analyze
+        </button>
+      </div>`;
+
+    const out = document.getElementById('ai-text-output');
+    out.innerHTML = parseMarkdown(text);
+    document.getElementById('ai-status-badge').textContent = 'Done';
+  } catch(e) {
+    document.getElementById('ai-content').innerHTML = `
+      <div class="ai-box" style="border-color:rgba(255,82,82,0.3)">
+        <div class="ai-label" style="color:var(--red)">Error</div>
+        <div class="ai-text" style="color:var(--text2)">API call failed: ${e.message}. Make sure you're using this in the Claude.ai artifact environment.</div>
+      </div>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="runAIAnalysis()">Retry</button>
+      </div>`;
+    document.getElementById('ai-status-badge').textContent = 'Error';
+  }
+}
+
+function buildAISummary() {
+  let s = `File: ${fileName}\nRows: ${cleanData.length} (cleaned from ${cleanReport.origRows})\nColumns: ${headers.length}\n\n`;
+  s += `COLUMN DETAILS:\n`;
+  headers.forEach(h => {
+    const st = colStats[h];
+    if (st.type === 'number') {
+      s += `- ${h} [numeric]: min=${fmt(st.min)}, max=${fmt(st.max)}, mean=${fmt(st.mean)}, median=${fmt(st.median)}, std=${fmt(st.std)}, missing=${st.nullPct}%\n`;
+    } else {
+      s += `- ${h} [text]: ${st.unique} unique values, top="${st.topVal}" (${st.topCount}×), missing=${st.nullPct}%\n`;
+    }
+  });
+  s += `\nCLEANING: Removed ${cleanReport.removedDups} duplicates, ${cleanReport.removedEmpty} empty rows, standardized ${cleanReport.nullified} null values.`;
+  return s;
+}
+
+function parseMarkdown(text) {
+  return text
+    .replace(/### (.*)/g, '<h3>$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.*)/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '\n');
+}
+
+// ─── DOWNLOADS ────────────────────────────────────────────────────────────────
+function downloadCleaned() {
+  const csv = Papa.unparse(cleanData, { header: true });
+  triggerDownload(csv, 'text/csv', fileName.replace('.csv','') + '_cleaned.csv');
+}
+
+function downloadReport() {
+  let report = `DATALENS ANALYSIS REPORT\n${'='.repeat(60)}\n`;
+  report += `File: ${fileName}\nOriginal Rows: ${cleanReport.origRows}\nCleaned Rows: ${cleanReport.finalRows}\nColumns: ${headers.length}\n\n`;
+  report += `CLEANING LOG\n${'-'.repeat(40)}\n`;
+  cleanReport.log.forEach(l => report += `[${l.type.toUpperCase()}] ${l.msg}\n`);
+  report += `\nCOLUMN STATISTICS\n${'-'.repeat(40)}\n`;
+  headers.forEach(h => {
+    const s = colStats[h];
+    report += `\n${h} (${s.type})\n`;
+    if (s.type === 'number') {
+      report += `  Count: ${s.count} | Missing: ${s.nullPct}%\n  Min: ${fmt(s.min)} | Max: ${fmt(s.max)}\n  Mean: ${fmt(s.mean)} | Median: ${fmt(s.median)} | Std: ${fmt(s.std)}\n`;
+    } else {
+      report += `  Count: ${s.count} | Unique: ${s.unique} | Missing: ${s.nullPct}%\n  Top: "${s.topVal}" (${s.topCount}×)\n`;
+    }
+  });
+  const aiEl = document.getElementById('ai-text-output');
+  if (aiEl) {
+    report += `\nAI INSIGHTS\n${'-'.repeat(40)}\n${aiEl.innerText}\n`;
+  }
+  triggerDownload(report, 'text/plain', fileName.replace('.csv','') + '_report.txt');
+}
+
+function triggerDownload(content, mimeType, name) {
+  const blob = new Blob([content], { type: mimeType });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── RESET ────────────────────────────────────────────────────────────────────
+function resetApp() {
+  chartInstances.forEach(c => c.destroy()); chartInstances = [];
+  rawData=[]; cleanData=[]; headers=[]; colTypes={}; colStats={}; cleanReport={};
+  document.getElementById('upload-section').classList.remove('hidden');
+  document.getElementById('main-content').classList.add('hidden');
+  document.getElementById('file-input').value = '';
+  document.getElementById('ai-content').innerHTML = `
+    <div class="btn-row" id="ai-btn-row">
+      <button class="btn btn-primary" onclick="runAIAnalysis()" id="ai-btn">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+        Generate AI Analysis
+      </button>
+    </div>`;
+}
+</script>
+</body>
+</html>
